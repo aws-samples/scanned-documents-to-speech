@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Scanned Documents to Speech</title>
+  <style>
+    .divTable{
+      display: table;
+      width: 100%;
+      border:1px solid black;
+      border-radius: 10px;
+      margin-top: 0.8em;
+      padding: 0.2em;
+      background-color: #FFFCBB;
+    }
+    .divTableRow {
+      display: table-row;
+    }
+    .divTableHeading {
+      background-color: #EEE;
+      display: table-header-group;
+    }
+    .divTableCell, .divTableHead {
+      border: 0px;
+      display: table-cell;
+      padding: 3px 10px;
+    }
+    .divTableHeading {
+      background-color: #EEE;
+      display: table-header-group;
+      font-weight: bold;
+    }
+    .divTableFoot {
+      background-color: #EEE;
+      display: table-footer-group;
+      font-weight: bold;
+    }
+    .divTableBody {
+      display: table-row-group;
+    }
+  </style>
+  <script language="javascript" type="text/javascript">
+    var imageReaderJobId = uuidv4();
+    var output;
+    var serverError = false;
+    var imageFileBaseName;
+    var audioFileBaseName;
+    var s3BucketName;
+    var fileEndpoint;
+    var conversionEndpoint;
+
+    function init()
+    {
+        output = document.getElementById('output');
+        // console.log(`ImageReader Job ID: ${imageReaderJobId}`);
+    }
+
+    function uuidv4() {
+        return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+            (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+        );
+    }
+
+    function main()
+    {
+        upload().then(
+            function(resp) {
+                if (resp.status === 200) {
+                    writeToScreen('Upload succeeded!');
+                    convertAndPlay();
+                } else {
+                    throw `Failed to upload - status is ${resp.status}.`;
+                }
+            },
+            function(error) {
+                throw 'Failed to upload - please check your File Endpoint.';
+            }
+        ).catch(function(error) {
+            writeToScreen(error);
+        });
+    }
+
+    function upload()
+    {
+        s3BucketName = document.getElementById('s3-bucket-name').value;
+        fileEndpoint = document.getElementById('file-endpoint').value;
+        conversionEndpoint = document.getElementById('conversion-endpoint').value;
+        if (s3BucketName.length === 0 || fileEndpoint.length === 0 || conversionEndpoint.length === 0) {
+            let message = 'Please first specify S3 Bucket Name, File Endpoint, and Conversion Endpoint.';
+            writeToScreen(`<span style="color: red;">${message}</span>`);
+            throw message;
+        }
+
+        let files = document.getElementById('image-file').files;
+        if (files.length === 0) {
+            let message = 'No file selected!';
+            writeToScreen(`<span style="color: red;">${message}</span>`);
+            throw message;
+        }
+
+        let imageFile = files[0];
+        imageFileBaseName = imageFile.name;
+
+        let userId = document.getElementById('user-id').value;
+        let uploadUrl = `${fileEndpoint}/${s3BucketName}/${userId}%2F${imageReaderJobId}%2Fimages%2F${imageFileBaseName}`;
+        writeToScreen('Uploading...');
+        let uploadPromise = fetch(
+            uploadUrl,
+            {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': imageFile.type,
+                    'Origin': window.location.href,
+                    // 'image-reader-user-id': userId,  // for API Gateway authorizer
+                },
+                body: imageFile
+            }
+        );
+        return uploadPromise;
+    }
+
+  function convertAndPlay()
+  {
+      let websocket = new WebSocket(conversionEndpoint);
+      websocket.onopen = function(evt) { onOpen(evt); };
+      websocket.onclose = function(evt) { onClose(evt); };
+      websocket.onmessage = function(evt) { onMessage(evt); };
+      websocket.onerror = function(evt) { onError(evt); };
+
+      function onOpen(evt)
+      {
+          // console.log("WebSocket CONNECTED");
+
+          let userId = document.getElementById('user-id').value;
+          var textractReq = `
+              {
+                  "action": "textract",
+                  "Bucket": "${s3BucketName}",
+                  "Key": "${userId}/${imageReaderJobId}/images/${imageFileBaseName}",
+                  "ImageReaderJobId": "${imageReaderJobId}",
+                  "UserId": "${userId}"
+              }
+          `;
+          websocket.send(textractReq);
+      }
+
+      function onClose(evt)
+      {
+          // console.log("WebSocket DISCONNECTED");
+          let userId = document.getElementById('user-id').value;
+          if (!serverError) {
+              let url = `${fileEndpoint}/${s3BucketName}/${userId}%2F${imageReaderJobId}%2Faudio%2F${audioFileBaseName}`;
+              play(url);
+          }
+      }
+
+      let progress = 0;
+      function onMessage(evt)
+      {
+          progress += 10;
+          writeToScreen(`<span style="color: blue;">PROGRESS: ${progress}% <img src="spinning.gif" alt="" width="15px" height="15px"/></span>`);
+          // console.log(evt.data)
+          if (evt.data.startsWith('s3://')) {
+              audioFileBaseName = basename(evt.data, '/');
+              // console.log(`evt.data: ${evt.data}`)
+              // console.log(`audioFileBaseName: ${audioFileBaseName}`)
+              websocket.close();
+          } else if (evt.data.startsWith('ERROR -')) {
+              writeToScreen(`<span style="color: red;">${evt.data}</span>`);
+              serverError = true;
+              websocket.close();
+          }
+      }
+
+      function onError(evt)
+      {
+          writeToScreen(`<span style="color: red;">ERROR: ${evt.data}</span>`);
+      }
+  }
+
+  function play(url)
+  {
+      // console.log(`Playing ${url}`);
+      writeToScreen('Playing audio.');
+      let audioPlayer = document.getElementById('audio-player');
+      audioPlayer.src = url;
+      audioPlayer.play();
+  }
+
+  function writeToScreen(message)
+  {
+      var pre = document.createElement("p");
+      pre.style.wordWrap = "break-word";
+      pre.innerHTML = message;
+      while (output.firstChild) {
+          output.firstChild.remove();
+      }
+      output.appendChild(pre);
+  }
+
+  function basename(str, sep) {
+      return str.substr(str.lastIndexOf(sep) + 1);
+  }
+
+  window.addEventListener("load", init, false);
+
+  </script>
+</head>
+
+<body style="margin: auto; width:40%;">
+  <h2>Scanned Documents to Speech</h2>
+
+  <div class="divTable">
+    <div class="divTableBody">
+      <div class="divTableRow">
+        <div class="divTableCell">S3 Bucket Name</div>
+        <div class="divTableCell"><input id="s3-bucket-name" style="width: 100%"/></div>
+      </div>
+      <div class="divTableRow">
+        <div class="divTableCell">File Endpoint</div>
+        <div class="divTableCell"><input id="file-endpoint" style="width: 100%"/></div>
+      </div>
+      <div class="divTableRow">
+        <div class="divTableCell">Conversion Endpoint</div>
+        <div class="divTableCell"><input id="conversion-endpoint" style="width: 100%"/></div>
+      </div>
+    </div>
+  </div>
+
+  <div
+    style="border:1px solid black; border-radius: 10px; margin-top: 0.8em; padding: 0.2em; background-color: #90EE90">
+    <div style="display: none;">
+      User ID: <input id="user-id" value="example-user"/>
+    </div>
+    <div>
+      <label for="image-file">Please choose a .JPG, .PDF or .PNG file</label>
+      <input id="image-file" type="file" accept=".jpg,.pdf,.png"/>
+    </div>
+    <div>
+      <label for="convert-and-play-button">then click</label>
+      <button id="convert-and-play-button" onclick="main()" style="margin-top: 0.8em;">Convert & Play Audio</button>
+    </div>
+  </div>
+  <div>
+    <figure style="margin-top: 0.8em; margin-left: 0em">
+      <figcaption>Audio will start automatically when ready</figcaption>
+      <audio controls id="audio-player" src="">
+        Your browser does not support the
+        <code>audio</code> element.
+      </audio>
+    </figure>
+  </div>
+
+  <div
+    id="output"
+    style="border: 1px solid black; border-radius: 10px; margin-top: 0.8em; padding-left: 0.2em; height: 4em; background-color: #CCCCCC;">
+  </div>
+
+</body>
+</html>
