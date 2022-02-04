@@ -1,8 +1,10 @@
 # Welcome to Scanned Documents to Speech project!
 
-## Setup
-
 This project provides an end-to-end solution that converts scanned documents/images to speech, and reads back to user.
+
+![Architecture Diagram](architecture.png)
+
+## Setup
 
 Using [AWS Cloud9](https://aws.amazon.com/cloud9/) to build and deploy this project is **strongly recommended**.  Please follow [the instructions here](https://aws.amazon.com/cloud9/getting-started/) to create a AWS Cloud9 environment before continuing.
 
