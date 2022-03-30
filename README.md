@@ -2,6 +2,8 @@
 
 This project provides an end-to-end solution that converts scanned documents/images to speech, and reads back to user.
 
+This is intended to be a demonstration implementation and is **not intended for production use without further modification**.
+
 ![Architecture Diagram](architecture.png)
 
 ## Setup
