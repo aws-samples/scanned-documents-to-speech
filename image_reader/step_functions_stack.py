@@ -4,7 +4,7 @@
 import pathlib
 
 from aws_cdk.aws_apigatewayv2 import CfnApi
-from aws_cdk.aws_iam import ManagedPolicy, Role, ServicePrincipal
+from aws_cdk.aws_iam import ManagedPolicy, PolicyStatement, Role, ServicePrincipal
 from aws_cdk.aws_lambda import Code, Function, Runtime
 from aws_cdk.aws_stepfunctions import JsonPath, StateMachine, Parallel
 from aws_cdk.aws_stepfunctions_tasks import LambdaInvoke
@@ -70,6 +70,24 @@ class StepFunctionsStack(Stack):
             definition=state_machine_definition,
         )
 
+        on_textract_ready_func_role = Role(
+            self,
+            id=f'{app_name}-ON-TEXTRACT-READY-FUNC-ROLE',
+            assumed_by=ServicePrincipal('lambda.amazonaws.com'),
+            managed_policies=[
+                ManagedPolicy.from_aws_managed_policy_name('service-role/AWSLambdaBasicExecutionRole'),
+                ManagedPolicy.from_aws_managed_policy_name('AmazonAPIGatewayInvokeFullAccess'),
+                ManagedPolicy.from_aws_managed_policy_name('AmazonDynamoDBReadOnlyAccess'),
+            ],
+        )
+
+        on_textract_ready_func_role.add_to_policy(
+            PolicyStatement(
+                actions=['states:StartExecution'],
+                resources=[state_machine.state_machine_arn],
+            ),
+        )
+
         # moving this to the lambda stack would trigger a cyclic depenency error
         self.on_textract_ready_func = Function(
             self,
@@ -84,15 +102,5 @@ class StepFunctionsStack(Stack):
                 'CONVERSION_API_REGION': Aws.REGION,
                 f'{app_name}_STATE_MACHINE': state_machine.state_machine_arn,
             },
-            role=Role(
-                self,
-                id=f'{app_name}-ON-TEXTRACT-READY-FUNC-ROLE',
-                assumed_by=ServicePrincipal('lambda.amazonaws.com'),
-                managed_policies=[
-                    ManagedPolicy.from_aws_managed_policy_name('service-role/AWSLambdaBasicExecutionRole'),
-                    ManagedPolicy.from_aws_managed_policy_name('AmazonAPIGatewayInvokeFullAccess'),
-                    ManagedPolicy.from_aws_managed_policy_name('AmazonDynamoDBReadOnlyAccess'),
-                    ManagedPolicy.from_aws_managed_policy_name('AWSStepFunctionsFullAccess'),
-                ],
-            ),
+            role=on_textract_ready_func_role,
         )
