@@ -38,7 +38,7 @@ class MainStack(Stack):
         apig_role = self._create_api_gateway_role(app_name)
         self.file_api = self._create_api_gateway_rest(app_name, apig_role)
         self._configure_api_gateway_web_socket(app_name, conversion_api, apig_role, convert_images_to_text_func)
-        self._create_dynamo_db_table(app_name)
+        self._create_ddb_table(app_name)
 
         CfnOutput(
             scope=self,
@@ -61,9 +61,8 @@ class MainStack(Stack):
             id=f'{app_name}-APIG-ROLE',
             assumed_by=ServicePrincipal('apigateway.amazonaws.com'),
             managed_policies=[
-                ManagedPolicy.from_aws_managed_policy_name('AmazonS3FullAccess'),
                 ManagedPolicy.from_aws_managed_policy_name('service-role/AmazonAPIGatewayPushToCloudWatchLogs'),
-                ManagedPolicy.from_aws_managed_policy_name('AmazonDynamoDBFullAccess'),
+                ManagedPolicy.from_aws_managed_policy_name('AmazonS3FullAccess'),
                 ManagedPolicy.from_aws_managed_policy_name('AWSLambda_FullAccess'),
             ],
         )
@@ -285,7 +284,7 @@ class MainStack(Stack):
         self.conversion_stage.add_depends_on(conversion_route)
         self.conversion_stage.add_depends_on(conversion_integ_response)
 
-    def _create_dynamo_db_table(self, app_name):
+    def _create_ddb_table(self, app_name):
         table = Table(
             self,
             id=f'{app_name}-DYNAMODB-TABLE',
