@@ -2,7 +2,9 @@
 
 This project provides an end-to-end solution that converts scanned documents/images to speech, and reads back to user.
 
-This is intended to be a demonstration implementation and is **not intended for production use without further modification**.
+Please refer to [this blog post](https://aws.amazon.com/blogs/machine-learning/increase-your-content-reach-with-automated-document-to-speech-conversion-using-amazon-ai-services/), which further explains the use cases for this solution and details its architecture.
+
+This soluiton is intended to be a demonstration implementation and is **not intended for production use without further modification**.
 
 ![Architecture Diagram](architecture.png)
 
